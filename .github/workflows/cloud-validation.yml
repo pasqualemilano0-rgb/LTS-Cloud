@@ -22,6 +22,8 @@ jobs:
         run: |
           set -euo pipefail
           node --input-type=module --check < worker.js
+          node --input-type=module --check < github-runs.js
+          node --test tests/github-runs.test.mjs
           python3 -c 'import pathlib,re,sys; h=pathlib.Path("index.html").read_text(); s=re.findall(r"<script>(.*?)</script>",h,re.S); assert len(s)==1; sys.stdout.write(s[0])' | node --check
       - name: Scan repository history for secrets
         shell: bash
@@ -43,7 +45,7 @@ jobs:
           python3 -m venv "$tmp/venv"
           "$tmp/venv/bin/pip" install --disable-pip-version-check semgrep==1.187.0
           mkdir "$tmp/source"
-          cp worker.js "$tmp/source/worker.js"
+          cp worker.js github-runs.js "$tmp/source/"
           python3 -c 'import pathlib,re,sys; h=pathlib.Path("index.html").read_text(); s=re.findall(r"<script>(.*?)</script>",h,re.S); assert len(s)==1; sys.stdout.write(s[0])' > "$tmp/source/dashboard.js"
           "$tmp/venv/bin/semgrep" scan --config "$PWD/.semgrep.yml" --metrics=off --disable-version-check --strict --error --no-git-ignore "$tmp/source"
       - name: Install pinned browser test tooling
