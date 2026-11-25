@@ -1,0 +1,21 @@
+rules:
+  - id: lts-no-dynamic-eval
+    languages: [javascript]
+    severity: ERROR
+    message: Dynamic code evaluation is prohibited.
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: Function(...)
+  - id: lts-no-document-write
+    languages: [javascript]
+    severity: ERROR
+    message: document.write creates unsafe HTML sinks.
+    pattern-either:
+      - pattern: document.write(...)
+      - pattern: document.writeln(...)
+  - id: lts-no-wildcard-postmessage
+    languages: [javascript]
+    severity: ERROR
+    message: postMessage must have a specific destination origin.
+    pattern: $OBJ.postMessage($DATA, "*")
