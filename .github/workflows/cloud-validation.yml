@@ -34,3 +34,40 @@ jobs:
           tar -xzf "$tmp/gitleaks.tar.gz" -C "$tmp" gitleaks
           "$tmp/gitleaks" version
           "$tmp/gitleaks" git --redact --log-opts="--all" .
+      - name: Semgrep local blocking security rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          python3 -m venv "$tmp/venv"
+          "$tmp/venv/bin/pip" install --disable-pip-version-check semgrep==1.187.0
+          mkdir "$tmp/source"
+          cp worker.js "$tmp/source/worker.js"
+          python3 -c 'import pathlib,re,sys; h=pathlib.Path("index.html").read_text(); s=re.findall(r"<script>(.*?)</script>",h,re.S); assert len(s)==1; sys.stdout.write(s[0])' > "$tmp/source/dashboard.js"
+          "$tmp/venv/bin/semgrep" scan --config "$PWD/.semgrep.yml" --metrics=off --disable-version-check --strict --error --no-git-ignore "$tmp/source"
+      - name: Install pinned browser test tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/lts-browser"
+          "$RUNNER_TEMP/lts-browser/bin/pip" install --disable-pip-version-check -r tests/requirements.txt
+          mkdir -p "$RUNNER_TEMP/lts-dependencies"
+          "$RUNNER_TEMP/lts-browser/bin/pip" freeze > "$RUNNER_TEMP/lts-dependencies/requirements.txt"
+      - name: OSV dependency vulnerability gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' 'https://github.com/google/osv-scanner/releases/download/v2.7.1/osv-scanner_linux_amd64' -o "$tmp/osv-scanner"
+          printf '%s  %s\n' 'fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8' "$tmp/osv-scanner" | sha256sum --check --strict
+          chmod 700 "$tmp/osv-scanner"
+          "$tmp/osv-scanner" scan source --recursive .
+          "$tmp/osv-scanner" scan source --lockfile="$RUNNER_TEMP/lts-dependencies/requirements.txt"
+      - name: Offline Chromium desktop and mobile smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/lts-browser/bin/playwright" install --with-deps chromium
+          "$RUNNER_TEMP/lts-browser/bin/python" tests/dashboard_smoke.py
