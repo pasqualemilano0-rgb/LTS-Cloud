@@ -54,12 +54,15 @@ export default {async fetch(req,env) {
   if(!["GET","POST"].includes(req.method)) return reply("Metodo non consentito",405);
   const configured=typeof env.GITHUB_CLIENT_ID==="string" && !!env.GITHUB_CLIENT_ID && typeof env.GITHUB_CLIENT_SECRET==="string" && !!env.GITHUB_CLIENT_SECRET && typeof env.SESSION_SECRET==="string" && env.SESSION_SECRET.length>=43;
   if(!configured) return u.pathname==="/" && req.method==="GET"?login(false):reply("Configurazione non completata",503);
+  let stage = "LTS-AUTH-01";
   try {
     if(u.pathname==="/auth/login" && req.method==="GET") {
+      stage = "LTS-AUTH-02";
       const state=random(), verifier=random();
       const challenge=b64(await crypto.subtle.digest("SHA-256",enc.encode(verifier)));
       const target=new URL("https://github.com/login/oauth/authorize");
-      target.search=new URLSearchParams({client_id:env.GITHUB_CLIENT_ID,redirect_uri:CALLBACK,scope:"",state,code_challenge:challenge,code_challenge_method:"S256",allow_signup:"false"});
+      target.search=new URLSearchParams({client_id:env.GITHUB_CLIENT_ID.trim(),redirect_uri:CALLBACK,state,code_challenge:challenge,code_challenge_method:"S256",allow_signup:"false"}).toString();
+      stage = "LTS-AUTH-03";
       return redirect(target.toString(),[cookie(STATE,await seal({kind:"oauth",state,verifier,exp:now()+600},env),600)]);
     }
     if(u.pathname==="/auth/callback" && req.method==="GET") {
@@ -67,14 +70,18 @@ export default {async fetch(req,env) {
       const flow=await unseal(readCookie(req,STATE),"oauth",env);
       const code=u.searchParams.get("code");
       if(!flow || u.searchParams.getAll("state").length!==1 || u.searchParams.get("state")!==flow.state || u.searchParams.getAll("code").length!==1 || !code || code.length>1024 || u.searchParams.has("error")) return reply("Accesso non valido. Torna alla pagina iniziale.",403,{},clear);
-      const tokenResponse=await fetch("https://github.com/login/oauth/access_token",{method:"POST",redirect:"error",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:env.GITHUB_CLIENT_ID,client_secret:env.GITHUB_CLIENT_SECRET,code,redirect_uri:CALLBACK,code_verifier:flow.verifier})});
+      stage = "LTS-AUTH-04";
+      const tokenResponse=await fetch("https://github.com/login/oauth/access_token",{method:"POST",redirect:"error",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:env.GITHUB_CLIENT_ID.trim(),client_secret:env.GITHUB_CLIENT_SECRET.trim(),code,redirect_uri:CALLBACK,code_verifier:flow.verifier}).toString()});
       if(!tokenResponse.ok) return reply("Autenticazione non riuscita",502,{},clear);
+      stage = "LTS-AUTH-05";
       const token=await tokenResponse.json();
       if(typeof token.access_token!=="string" || !token.access_token || token.error) return reply("Autenticazione non riuscita",403,{},clear);
+      stage = "LTS-AUTH-06";
       const userResponse=await fetch("https://api.github.com/user",{redirect:"error",headers:{Authorization:"Bearer "+token.access_token,Accept:"application/vnd.github+json","User-Agent":"LTS-Pipeline"}});
       if(!userResponse.ok) return reply("Verifica identità non riuscita",502,{},clear);
       const user=await userResponse.json();
       if(String(user.id)!==OWNER) return reply("Account non autorizzato",403,{},clear);
+      stage = "LTS-AUTH-07";
       const ttl=3600;
       return redirect(BASE+"/",[cookie(STATE,"",0),cookie(SESSION,await seal({kind:"session",sub:OWNER,exp:now()+ttl},env),ttl)]);
     }
@@ -84,6 +91,7 @@ export default {async fetch(req,env) {
     }
     if(u.pathname!=="/" || req.method!=="GET") return reply("Non trovato",404);
     const session=await unseal(readCookie(req,SESSION),"session",env);
-    return session?.sub===OWNER?consolePage():login(true);
-  } catch { return reply("Servizio temporaneamente non disponibile",503); }
+    stage = "LTS-AUTH-08";
+    return session?.sub===OWNER?await consolePage():login(true);
+  } catch { return reply("Servizio temporaneamente non disponibile. Codice: "+stage,503); }
 }};
