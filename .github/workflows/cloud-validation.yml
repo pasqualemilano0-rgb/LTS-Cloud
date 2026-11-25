@@ -67,9 +67,12 @@ jobs:
           chmod 700 "$tmp/osv-scanner"
           "$tmp/osv-scanner" scan source --recursive .
           "$tmp/osv-scanner" scan source --lockfile="$RUNNER_TEMP/lts-dependencies/requirements.txt"
+      - name: Isolated hosting HTTP laboratory
+        run: python3 tests/hosting_lab_test.py
       - name: Offline Chromium desktop and mobile smoke
         shell: bash
         run: |
           set -euo pipefail
           "$RUNNER_TEMP/lts-browser/bin/playwright" install --with-deps chromium
           "$RUNNER_TEMP/lts-browser/bin/python" tests/dashboard_smoke.py
+          "$RUNNER_TEMP/lts-browser/bin/python" tests/hosting_browser.py
