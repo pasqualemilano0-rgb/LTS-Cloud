@@ -128,7 +128,11 @@ export default {async fetch(req,env) {
       const session=await unseal(readCookie(req,SESSION),"session",env);
       if(session?.sub!==OWNER)return json({error:"Accesso richiesto"},401);
       if(req.headers.get("Sec-Fetch-Site")==="cross-site")return json({error:"Origine non autorizzata"},403);
-      try{return json(await readRuns())}catch{return json({error:"GitHub temporaneamente non disponibile"},503)}
+      try{return json(await readRuns())}catch(err){
+        const allowed=["GH-TIMEOUT","GH-NETWORK","GH-REDIRECT","GH-RATE-LIMIT","GH-FORBIDDEN","GH-NOT-FOUND","GH-HTTP","GH-INVALID-JSON"];
+        const code=allowed.includes(err?.code)?err.code:"GH-UNAVAILABLE";
+        return json({error:"GitHub temporaneamente non disponibile",code},503);
+      }
     }
     if(u.pathname!=="/" || req.method!=="GET") return reply("Non trovato",404);
     const session=await unseal(readCookie(req,SESSION),"session",env);
