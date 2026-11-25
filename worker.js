@@ -96,10 +96,22 @@ export default {async fetch(req,env) {
         return authFailure("LTS-AUTH-05-"+(allowed.includes(token?.error)?token.error:"INVALID_RESPONSE"),403,clear);
       }
       stage = "LTS-AUTH-06";
-      const userResponse=await fetch("https://api.github.com/user",{redirect:"error",headers:{Authorization:"Bearer "+token.access_token,Accept:"application/vnd.github+json","User-Agent":"LTS-Pipeline"}});
-      if(!userResponse.ok) return reply("Verifica identità non riuscita",502,{},clear);
-      const user=await userResponse.json();
-      if(String(user.id)!==OWNER) return reply("Account non autorizzato",403,{},clear);
+      let userResponse;
+      try {
+        userResponse=await globalThis.fetch("https://api.github.com/user",{
+          method:"GET",
+          redirect:"manual",
+          headers:{"Authorization":"Bearer "+token.access_token,"Accept":"application/vnd.github+json","User-Agent":"LTS-Pipeline/0.3","X-GitHub-Api-Version":"2022-11-28"}
+        });
+      } catch (err) {
+        const kind=err?.name==="TypeError"?"NETWORK":err?.name==="AbortError"?"TIMEOUT":"EXCEPTION";
+        return authFailure("LTS-AUTH-06-"+kind,502,clear);
+      }
+      if(userResponse.status>=300 && userResponse.status<400) return authFailure("LTS-AUTH-06-REDIRECT-"+userResponse.status,502,clear);
+      if(!userResponse.ok) return authFailure("LTS-AUTH-06-HTTP-"+userResponse.status,502,clear);
+      let user;
+      try { user=await userResponse.json(); } catch { return authFailure("LTS-AUTH-06-INVALID-JSON",502,clear); }
+      if(!user || !Number.isSafeInteger(user.id) || String(user.id)!==OWNER) return reply("Account non autorizzato",403,{},clear);
       stage = "LTS-AUTH-07";
       const ttl=3600;
       return redirect(BASE+"/",[cookie(STATE,"",0),cookie(SESSION,await seal({kind:"session",sub:OWNER,exp:now()+ttl},env),ttl)]);
