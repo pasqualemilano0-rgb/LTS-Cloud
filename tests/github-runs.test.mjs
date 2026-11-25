@@ -23,3 +23,22 @@ test('API authorization and method checks before upstream call',async()=>{
   assert.equal((await worker.fetch(new Request(url+'?repo=other'),env)).status,400);
   assert.equal((await worker.fetch(new Request(url),{})).status,503);
 });
+
+test('valid owner session succeeds; other owner, expired and cross-site sessions fail',async()=>{
+  const {createHmac}=await import('node:crypto');
+  const src=(await readFile(new URL('../worker.js',import.meta.url),'utf8')).replace('import HTML from "./index.html";','const HTML="<script></script>";').replace('import {readRuns} from "./github-runs.js";','const readRuns=async()=>({repository:"LTS-Cloud",runs:[]});');
+  const {default:worker}=await import('data:text/javascript;base64,'+Buffer.from(src).toString('base64'));
+  const env={GITHUB_CLIENT_ID:'test',GITHUB_CLIENT_SECRET:'test',SESSION_SECRET:'test'.repeat(12)};
+  const url='https://lts-pipeline.pasqualemilano0.workers.dev/api/github/runs';
+  const now=Math.floor(Date.now()/1000);
+  const cookie=(sub,exp)=>{
+    const payload=Buffer.from(JSON.stringify({kind:'session',sub,exp})).toString('base64url');
+    return '__Host-lts_session='+payload+'.'+createHmac('sha256',env.SESSION_SECRET).update(payload).digest('base64url');
+  };
+  const get=(sub,exp,extra={})=>worker.fetch(new Request(url,{headers:{Cookie:cookie(sub,exp),...extra}}),env);
+  const ok=await get('287172713',now+60);
+  assert.equal(ok.status,200);assert.equal(ok.headers.get('Cache-Control'),'no-store');assert.deepEqual(await ok.json(),{repository:'LTS-Cloud',runs:[]});
+  assert.equal((await get('1',now+60)).status,401);
+  assert.equal((await get('287172713',now-1)).status,401);
+  assert.equal((await get('287172713',now+60,{'Sec-Fetch-Site':'cross-site'})).status,403);
+});
