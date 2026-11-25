@@ -1,4 +1,5 @@
 import HTML from "./index.html";
+import {readRuns} from "./github-runs.js";
 const BASE = "https://lts-pipeline.pasqualemilano0.workers.dev";
 const CALLBACK = BASE + "/auth/callback";
 const OWNER = "287172713";
@@ -49,7 +50,7 @@ async function consolePage() {
   const scripts=[...HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   const hashes=await Promise.all(scripts.map(async m=>"'sha256-"+btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256",enc.encode(m[1])))))+"'"));
   const page=HTML.replace('<span>Workspace personale</span>','<span>Workspace personale · DEMO</span><form action="/auth/logout" method="post"><button type="submit">Esci</button></form>');
-  return reply(page,200,{"Content-Type":"text/html; charset=utf-8","Content-Security-Policy":"default-src 'none'; script-src "+hashes.join(" ")+"; style-src 'unsafe-inline'; img-src data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; connect-src 'none'"});
+  return reply(page,200,{"Content-Type":"text/html; charset=utf-8","Content-Security-Policy":"default-src 'none'; script-src "+hashes.join(" ")+"; style-src 'unsafe-inline'; img-src data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'"});
 }
 export default {async fetch(req,env) {
   const u=new URL(req.url);
@@ -119,6 +120,15 @@ export default {async fetch(req,env) {
     if(u.pathname==="/auth/logout" && req.method==="POST") {
       if(req.headers.get("Origin")!==BASE) return reply("Origine non autorizzata",403);
       return redirect(BASE+"/",[cookie(SESSION,"",0),cookie(STATE,"",0)]);
+    }
+    if(u.pathname==="/api/github/runs"){
+      const json=(data,status=200)=>reply(JSON.stringify(data),status,{"Content-Type":"application/json; charset=utf-8"});
+      if(req.method!=="GET")return json({error:"Metodo non consentito"},405);
+      if(u.search)return json({error:"Parametri non supportati"},400);
+      const session=await unseal(readCookie(req,SESSION),"session",env);
+      if(session?.sub!==OWNER)return json({error:"Accesso richiesto"},401);
+      if(req.headers.get("Sec-Fetch-Site")==="cross-site")return json({error:"Origine non autorizzata"},403);
+      try{return json(await readRuns())}catch{return json({error:"GitHub temporaneamente non disponibile"},503)}
     }
     if(u.pathname!=="/" || req.method!=="GET") return reply("Non trovato",404);
     const session=await unseal(readCookie(req,SESSION),"session",env);
