@@ -20,7 +20,7 @@ export async function readRuns(){
     if(!Array.isArray(p?.workflow_runs))throw failure("GH-INVALID-JSON");
     const txt=v=>typeof v==="string"?v.slice(0,160):"";
     const date=v=>typeof v==="string"&&Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
-    const runs=p.workflow_runs.slice(0,20).filter(x=>x&&Number.isSafeInteger(x.id)&&x.id>0).map(x=>({id:x.id,name:txt(x.name),branch:txt(x.head_branch),status:txt(x.status),conclusion:txt(x.conclusion),started:date(x.run_started_at),updated:date(x.updated_at)}));
+    const runs=p.workflow_runs.slice(0,20).filter(x=>x&&Number.isSafeInteger(x.id)&&x.id>0).map(x=>({id:x.id,manageable:x.event==="workflow_dispatch"&&x.head_branch==="main"&&x.head_repository?.id===1471822523&&[".github/workflows/cloud-validation.yml",".github/workflows/cloud-validation.yml@refs/heads/main"].includes(x.path),name:txt(x.name),branch:txt(x.head_branch),status:txt(x.status),conclusion:txt(x.conclusion),started:date(x.run_started_at),updated:date(x.updated_at)}));
     const data={repository:"LTS-Cloud",fetchedAt:new Date().toISOString(),runs};
     cache={at:Date.now(),data};return data;
 }

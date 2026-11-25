@@ -2,11 +2,12 @@ name: Cloud validation
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: cloud-validation-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: cloud-validation-${{ github.event.pull_request.number || 'manual' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   validate:
     if: ${{ github.event.repository.private == false }}
@@ -23,7 +24,7 @@ jobs:
           set -euo pipefail
           node --input-type=module --check < worker.js
           node --input-type=module --check < github-runs.js
-          node --test tests/github-runs.test.mjs tests/auth-release.test.mjs tests/cloud-core.test.mjs
+          node --test tests/github-runs.test.mjs tests/auth-release.test.mjs tests/cloud-core.test.mjs tests/pipeline-actions.test.mjs
           python3 -c 'import pathlib,re,sys; h=pathlib.Path("index.html").read_text(); s=re.findall(r"<script>(.*?)</script>",h,re.S); assert len(s)==1; sys.stdout.write(s[0])' | node --check
       - name: Scan repository history for secrets
         shell: bash
@@ -73,7 +74,9 @@ jobs:
       - name: Isolated PostgreSQL RLS laboratory
         run: bash tests/database_lab.sh
       - name: D1-compatible SQLite capacity test
-        run: python3 tests/cloud_core_sql.py
+        run: |
+          python3 tests/cloud_core_sql.py
+          python3 tests/action_quota_sql.py
       - name: Isolated private storage laboratory
         run: python3 tests/storage_lab_test.py
       - name: Encrypted backup restore and local monitor laboratory

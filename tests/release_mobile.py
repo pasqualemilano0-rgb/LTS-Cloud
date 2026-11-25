@@ -18,7 +18,7 @@ with sync_playwright() as p:
             button.click()
             expect(button).to_have_attribute("aria-current","page")
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"), (width,i)
-        expect(page.locator("footer")).to_contain_text("1.0.0-rc.2")
+        expect(page.locator("footer")).to_contain_text("1.0.0-rc.3")
         assert not errors, errors
         assert not requests, requests
         ctx.close()

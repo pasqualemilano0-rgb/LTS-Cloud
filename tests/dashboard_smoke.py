@@ -73,10 +73,12 @@ with sync_playwright() as p:
                 route.abort()
         view.route("**/*", route_request)
         view.goto("https://console.test/")
+        expect(view.locator("#real-results")).to_contain_text("Superata")
+        seen.clear()
         view.locator('nav button[data-page="github"]').click()
         expect(view.locator("#real-results")).to_contain_text("<img src=x onerror=alert(1)>")
         expect(view.locator("#real-results img")).to_have_count(0)
-        expect(view.locator("#real-results a")).to_have_attribute("href","https://github.com/pasqualemilano0-rgb/LTS-Cloud/actions/runs/123")
+        expect(view.locator("#real-results a[href*='/actions/runs/']")).to_have_attribute("href","https://github.com/pasqualemilano0-rgb/LTS-Cloud/actions/runs/123")
         expect(view.locator("#real-results")).to_contain_text("Superata")
         expect(view.locator("#new")).to_be_hidden()
         mode["status"] = 503
