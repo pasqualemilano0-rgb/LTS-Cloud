@@ -23,7 +23,7 @@ jobs:
           set -euo pipefail
           node --input-type=module --check < worker.js
           node --input-type=module --check < github-runs.js
-          node --test tests/github-runs.test.mjs
+          node --test tests/github-runs.test.mjs tests/auth-release.test.mjs
           python3 -c 'import pathlib,re,sys; h=pathlib.Path("index.html").read_text(); s=re.findall(r"<script>(.*?)</script>",h,re.S); assert len(s)==1; sys.stdout.write(s[0])' | node --check
       - name: Scan repository history for secrets
         shell: bash
@@ -86,3 +86,4 @@ jobs:
           "$RUNNER_TEMP/lts-browser/bin/python" tests/database_browser.py
           "$RUNNER_TEMP/lts-browser/bin/python" tests/storage_browser.py
           "$RUNNER_TEMP/lts-browser/bin/python" tests/backup_monitor_browser.py
+          "$RUNNER_TEMP/lts-browser/bin/python" tests/release_mobile.py

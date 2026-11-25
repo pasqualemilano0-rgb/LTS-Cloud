@@ -41,10 +41,10 @@ function reply(body,status=200,extra={},cookies=[]) {
 }
 const redirect=(url,cookies=[])=>reply(null,303,{Location:url},cookies);
 function authFailure(code,status,clear) {
-  return reply(`<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LTS Pipeline — Accesso</title><style>body{font:16px system-ui;background:#f4f6f8;color:#20262d;margin:0;padding:24px}main{max-width:480px;margin:10vh auto;background:white;border:1px solid #ddd;padding:28px;border-radius:10px}a{display:block;background:#137e58;color:white;text-decoration:none;padding:12px;text-align:center;border-radius:6px}code{overflow-wrap:anywhere}</style><main><h1>Accesso non completato</h1><p>Il collegamento con GitHub non è riuscito.</p><p>Codice: <code>${code}</code></p><a href="/">Riprova dalla pagina di accesso</a></main></html>`,status,{"Content-Type":"text/html; charset=utf-8"},clear);
+  return reply(`<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LTS CLOUD — Accesso</title><style>body{font:16px system-ui;background:#f4f6f8;color:#20262d;margin:0;padding:24px}main{max-width:480px;margin:10vh auto;background:white;border:1px solid #ddd;padding:28px;border-radius:10px}a{display:block;background:#137e58;color:white;text-decoration:none;padding:12px;text-align:center;border-radius:6px}code{overflow-wrap:anywhere}</style><main><h1>Accesso non completato</h1><p>Il collegamento con GitHub non è riuscito.</p><p>Codice: <code>${code}</code></p><a href="/">Riprova dalla pagina di accesso</a></main></html>`,status,{"Content-Type":"text/html; charset=utf-8"},clear);
 }
 function login(configured) {
-  return reply(`<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LTS Pipeline — Accesso</title><style>*{box-sizing:border-box}body{margin:0;background:#f5f6f7;color:#20262d;font:16px system-ui;min-height:100vh;display:grid;place-items:center;padding:22px}main{background:white;border:1px solid #d8dde1;border-radius:12px;width:min(100%,440px);padding:36px}small{color:#52606b}a{display:block;text-align:center;background:#137e58;color:white;padding:13px;border-radius:6px;text-decoration:none;font-weight:650;margin-top:25px}h1{margin:14px 0 8px}p{line-height:1.6}</style><main><small>WORKSPACE PRIVATO · CI/CD</small><h1>LTS Pipeline</h1><p>${configured?"Accedi con il tuo account GitHub autorizzato.":"Accesso in configurazione. La console resta protetta."}</p>${configured?'<a href="/auth/login">Accedi con GitHub</a>':'<small>Configurazione OAuth non completata.</small>'}</main></html>`,configured?200:503,{"Content-Type":"text/html; charset=utf-8"});
+  return reply(`<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LTS CLOUD — Accesso</title><style>*{box-sizing:border-box}body{margin:0;background:#f5f6f7;color:#20262d;font:16px system-ui;min-height:100vh;display:grid;place-items:center;padding:22px}main{background:white;border:1px solid #d8dde1;border-radius:12px;width:min(100%,440px);padding:36px}small{color:#52606b}a{display:block;text-align:center;background:#137e58;color:white;padding:13px;border-radius:6px;text-decoration:none;font-weight:650;margin-top:25px}h1{margin:14px 0 8px}p{line-height:1.6}</style><main><small>WORKSPACE PRIVATO · CONSOLE</small><h1>LTS CLOUD</h1><p>${configured?"Accedi con il tuo account GitHub autorizzato.":"Accesso in configurazione. La console resta protetta."}</p>${configured?'<a href="/auth/login">Accedi con GitHub</a>':'<small>Configurazione OAuth non completata.</small>'}</main></html>`,configured?200:503,{"Content-Type":"text/html; charset=utf-8"});
 }
 async function consolePage() {
   const scripts=[...HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)];
@@ -81,7 +81,7 @@ export default {async fetch(req,env) {
         tokenResponse=await globalThis.fetch("https://github.com/login/oauth/access_token",{
           method:"POST",
           redirect:"manual",
-          headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded","User-Agent":"LTS-Pipeline/0.3"},
+          headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded","User-Agent":"LTS-Cloud/1.0-rc.1"},
           body:form.toString()
         });
       } catch (err) {
@@ -102,7 +102,7 @@ export default {async fetch(req,env) {
         userResponse=await globalThis.fetch("https://api.github.com/user",{
           method:"GET",
           redirect:"manual",
-          headers:{"Authorization":"Bearer "+token.access_token,"Accept":"application/vnd.github+json","User-Agent":"LTS-Pipeline/0.3","X-GitHub-Api-Version":"2022-11-28"}
+          headers:{"Authorization":"Bearer "+token.access_token,"Accept":"application/vnd.github+json","User-Agent":"LTS-Cloud/1.0-rc.1","X-GitHub-Api-Version":"2022-11-28"}
         });
       } catch (err) {
         const kind=err?.name==="TypeError"?"NETWORK":err?.name==="AbortError"?"TIMEOUT":"EXCEPTION";
