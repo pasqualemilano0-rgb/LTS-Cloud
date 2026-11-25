@@ -69,6 +69,8 @@ jobs:
           "$tmp/osv-scanner" scan source --lockfile="$RUNNER_TEMP/lts-dependencies/requirements.txt"
       - name: Isolated hosting HTTP laboratory
         run: python3 tests/hosting_lab_test.py
+      - name: Isolated PostgreSQL RLS laboratory
+        run: bash tests/database_lab.sh
       - name: Offline Chromium desktop and mobile smoke
         shell: bash
         run: |
@@ -76,3 +78,4 @@ jobs:
           "$RUNNER_TEMP/lts-browser/bin/playwright" install --with-deps chromium
           "$RUNNER_TEMP/lts-browser/bin/python" tests/dashboard_smoke.py
           "$RUNNER_TEMP/lts-browser/bin/python" tests/hosting_browser.py
+          "$RUNNER_TEMP/lts-browser/bin/python" tests/database_browser.py
