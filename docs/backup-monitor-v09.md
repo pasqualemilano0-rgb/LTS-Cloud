@@ -1,0 +1,5 @@
+# V0.9 Backup e Monitor — laboratorio
+Il laboratorio Node usa AES-256-GCM con chiave casuale di 32 byte e nonce casuale di 12 byte per ciascun backup. Il formato versione LTSB1 autentica l'intestazione e il contenuto; il ripristino restituisce dati solo dopo verifica del tag. Test su file sintetico temporaneo: rimozione originale, ripristino, confronto, chiave errata, alterazioni, limiti. Nessuna chiave persistente; non è una soluzione di backup produttivo.
+Il monitor campiona risorse della macchina che esegue i test, non del Worker o dei server aziendali. CPU su differenza di contatori, RAM e disco percentuali, soglie 80/90%, stato servizi sintetico, massimo 100 eventi in memoria. Nessuna raccolta remota, cron o notifica. I valori del laboratorio non sono esposti dalla dashboard.
+Esecuzione: node --test tests/backup_monitor.test.mjs
+Prima dell'uso reale: destinazione separata e autorizzata, custodia e rotazione chiavi, backup versionati, retention, ripristino end-to-end, autenticazione agenti, protezione rete, storico e politiche di allarme. Non collegare dati reali. Nessuna migrazione.
