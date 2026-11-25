@@ -49,9 +49,52 @@ function login(configured) {
 async function consolePage() {
   const scripts=[...HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   const hashes=await Promise.all(scripts.map(async m=>"'sha256-"+btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256",enc.encode(m[1])))))+"'"));
-  const page=HTML.replace('<span>Workspace personale</span>','<span>Workspace personale · DEMO</span><form action="/auth/logout" method="post"><button type="submit">Esci</button></form>');
+  const page=HTML.replace('<span>Workspace personale</span>','<span>Workspace personale</span><form action="/auth/logout" method="post"><button type="submit">Esci</button></form>');
   return reply(page,200,{"Content-Type":"text/html; charset=utf-8","Content-Security-Policy":"default-src 'none'; script-src "+hashes.join(" ")+"; style-src 'unsafe-inline'; img-src data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'"});
 }
+
+const GH_REPO="https://api.github.com/repos/pasqualemilano0-rgb/LTS-Cloud";
+const GH_REPO_ID=1471822523;
+const GH_WORKFLOW=".github/workflows/cloud-validation.yml";
+function managedRun(r){
+  return r?.event==="workflow_dispatch"&&r.head_branch==="main"&&r.head_repository?.id===GH_REPO_ID&&(r.path===GH_WORKFLOW||r.path===GH_WORKFLOW+"@refs/heads/main");
+}
+async function ghActionRequest(path,token,method="GET",body){
+  const c=new AbortController(),timer=setTimeout(()=>c.abort(),8000);
+  try{
+    const r=await globalThis.fetch(GH_REPO+path,{method,redirect:"manual",signal:c.signal,headers:{"Accept":"application/vnd.github+json","Authorization":"Bearer "+token,"X-GitHub-Api-Version":"2022-11-28","User-Agent":"LTS-Cloud/1.0-rc.3",...(body?{"Content-Type":"application/json"}:{})},...(body?{body:JSON.stringify(body)}:{})});
+    if(!r.ok)throw Error("GH_ACTION_FAILED");
+    if(method==="GET")return await r.json();
+    return true;
+  }finally{clearTimeout(timer)}
+}
+async function performAction(req,u,env,json){
+  if(req.method!=="POST")return json({error:"Metodo non consentito"},405);
+  if(req.headers.get("Origin")!==BASE||req.headers.get("Sec-Fetch-Site")==="cross-site")return json({error:"Origine non autorizzata"},403);
+  const m=u.pathname.match(/^\/api\/github\/actions\/(dispatch|cancel\/([1-9][0-9]{0,14})|rerun\/([1-9][0-9]{0,14}))$/);
+  if(!m||u.search)return json({error:"Operazione non supportata"},400);
+  if(req.body!==null)return json({error:"Corpo non supportato"},400);
+  const token=env.GITHUB_ACTIONS_TOKEN;
+  if(typeof token!=="string"||!token.startsWith("github_pat_")||!env.CLOUD_DB)return json({error:"Autorizzazione dedicata non configurata"},503);
+  const id=m[2]||m[3],action=id?(m[2]?"cancel":"rerun"):"dispatch";
+  try{
+    const repo=await ghActionRequest("",token);
+    if(repo.id!==GH_REPO_ID||repo.private!==false||repo.visibility!=="public"||repo.default_branch!=="main")return json({error:"Repository non pubblico o non autorizzato"},409);
+    if(id){
+      const run=await ghActionRequest("/actions/runs/"+id,token);
+      if(String(run.id)!==id||!managedRun(run))return json({error:"Esecuzione non autorizzata"},403);
+      if(action==="cancel"&&!["queued","in_progress","waiting","pending","requested"].includes(run.status))return json({error:"Esecuzione non annullabile"},409);
+      if(action==="rerun"&&(run.status!=="completed"||!["failure","cancelled","timed_out"].includes(run.conclusion)))return json({error:"Ripetizione non disponibile"},409);
+    }
+    const time=Date.now(),day=new Date(time).toISOString().slice(0,10);
+    const slot=await env.CLOUD_DB.prepare("INSERT INTO action_quota(id,day,used,last_ms) VALUES(1,?,1,?) ON CONFLICT(id) DO UPDATE SET day=excluded.day,used=CASE WHEN action_quota.day=excluded.day THEN action_quota.used+1 ELSE 1 END,last_ms=excluded.last_ms WHERE excluded.last_ms-action_quota.last_ms>=30000 AND (action_quota.day<>excluded.day OR action_quota.used<10) RETURNING used").bind(day,time).first();
+    if(!slot)return json({error:"Limite raggiunto: 10 operazioni al giorno, intervallo 30 secondi"},429);
+    if(action==="dispatch")await ghActionRequest("/actions/workflows/cloud-validation.yml/dispatches",token,"POST",{ref:"main"});
+    else await ghActionRequest("/actions/runs/"+id+"/"+action,token,"POST");
+    return json({accepted:true,action,remaining:10-slot.used},202);
+  }catch{return json({error:"Esito non verificato. Controlla GitHub prima di riprovare."},503)}
+}
+
 export default {async fetch(req,env) {
   const u=new URL(req.url);
   if(u.origin!==BASE) return reply("Accesso negato",403);
@@ -81,7 +124,7 @@ export default {async fetch(req,env) {
         tokenResponse=await globalThis.fetch("https://github.com/login/oauth/access_token",{
           method:"POST",
           redirect:"manual",
-          headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded","User-Agent":"LTS-Cloud/1.0-rc.1"},
+          headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded","User-Agent":"LTS-Cloud/1.0-rc.3"},
           body:form.toString()
         });
       } catch (err) {
@@ -102,7 +145,7 @@ export default {async fetch(req,env) {
         userResponse=await globalThis.fetch("https://api.github.com/user",{
           method:"GET",
           redirect:"manual",
-          headers:{"Authorization":"Bearer "+token.access_token,"Accept":"application/vnd.github+json","User-Agent":"LTS-Cloud/1.0-rc.1","X-GitHub-Api-Version":"2022-11-28"}
+          headers:{"Authorization":"Bearer "+token.access_token,"Accept":"application/vnd.github+json","User-Agent":"LTS-Cloud/1.0-rc.3","X-GitHub-Api-Version":"2022-11-28"}
         });
       } catch (err) {
         const kind=err?.name==="TypeError"?"NETWORK":err?.name==="AbortError"?"TIMEOUT":"EXCEPTION";
@@ -176,6 +219,12 @@ export default {async fetch(req,env) {
         return json({error:"Operazione non supportata"},404);
       }catch{return json({error:"Servizio D1 temporaneamente non disponibile"},503)}
     }
+    if(u.pathname.startsWith("/api/github/actions/")){
+      const json=(data,status=200)=>reply(JSON.stringify(data),status,{"Content-Type":"application/json; charset=utf-8"});
+      const session=await unseal(readCookie(req,SESSION),"session",env);
+      if(session?.sub!==OWNER)return json({error:"Accesso richiesto"},401);
+      return performAction(req,u,env,json);
+    }
     if(u.pathname==="/api/github/runs"){
       const json=(data,status=200)=>reply(JSON.stringify(data),status,{"Content-Type":"application/json; charset=utf-8"});
       if(req.method!=="GET")return json({error:"Metodo non consentito"},405);
@@ -183,7 +232,7 @@ export default {async fetch(req,env) {
       const session=await unseal(readCookie(req,SESSION),"session",env);
       if(session?.sub!==OWNER)return json({error:"Accesso richiesto"},401);
       if(req.headers.get("Sec-Fetch-Site")==="cross-site")return json({error:"Origine non autorizzata"},403);
-      try{return json(await readRuns())}catch(err){
+      try{return json({...await readRuns(),actionsConfigured:typeof env.GITHUB_ACTIONS_TOKEN==="string"&&env.GITHUB_ACTIONS_TOKEN.startsWith("github_pat_")&&!!env.CLOUD_DB})}catch(err){
         const allowed=["GH-TIMEOUT","GH-NETWORK","GH-REDIRECT","GH-RATE-LIMIT","GH-FORBIDDEN","GH-NOT-FOUND","GH-HTTP","GH-INVALID-JSON"];
         const code=allowed.includes(err?.code)?err.code:"GH-UNAVAILABLE";
         return json({error:"GitHub temporaneamente non disponibile",code},503);

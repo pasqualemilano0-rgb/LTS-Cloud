@@ -37,7 +37,7 @@ test('valid owner session succeeds; other owner, expired and cross-site sessions
   };
   const get=(sub,exp,extra={})=>worker.fetch(new Request(url,{headers:{Cookie:cookie(sub,exp),...extra}}),env);
   const ok=await get('287172713',now+60);
-  assert.equal(ok.status,200);assert.equal(ok.headers.get('Cache-Control'),'no-store');assert.deepEqual(await ok.json(),{repository:'LTS-Cloud',runs:[]});
+  assert.equal(ok.status,200);assert.equal(ok.headers.get('Cache-Control'),'no-store');assert.deepEqual(await ok.json(),{repository:'LTS-Cloud',runs:[],actionsConfigured:false});
   assert.equal((await get('1',now+60)).status,401);
   assert.equal((await get('287172713',now-1)).status,401);
   assert.equal((await get('287172713',now+60,{'Sec-Fetch-Site':'cross-site'})).status,403);
