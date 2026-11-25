@@ -51,7 +51,7 @@ test('OAuth PKCE, owner gate, signed session, CSP and logout with synthetic upst
     assert.equal(page.headers.get('Cache-Control'),'no-store');
     assert.equal(page.headers.get('X-Frame-Options'),'DENY');
     assert.equal(page.headers.get('X-Content-Type-Options'),'nosniff');
-    const content=await page.text();assert.match(content,/1\.0\.0-rc\.1/);
+    const content=await page.text();assert.match(content,/1\.0\.0-rc\.2/);
     for(const match of content.matchAll(/<script>([\s\S]*?)<\/script>/g)){
       assert.ok(page.headers.get('Content-Security-Policy').includes("'sha256-"+createHash('sha256').update(match[1]).digest('base64')+"'"));
     }

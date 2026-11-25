@@ -121,6 +121,61 @@ export default {async fetch(req,env) {
       if(req.headers.get("Origin")!==BASE) return reply("Origine non autorizzata",403);
       return redirect(BASE+"/",[cookie(SESSION,"",0),cookie(STATE,"",0)]);
     }
+
+    if(u.pathname.startsWith("/api/cloud/")){
+      const json=(data,status=200)=>reply(JSON.stringify(data),status,{"Content-Type":"application/json; charset=utf-8"});
+      const session=await unseal(readCookie(req,SESSION),"session",env);
+      if(session?.sub!==OWNER)return json({error:"Accesso richiesto"},401);
+      if(req.headers.get("Sec-Fetch-Site")==="cross-site")return json({error:"Origine non autorizzata"},403);
+      if(u.search)return json({error:"Parametri non supportati"},400);
+      if(req.method==="POST"&&req.headers.get("Origin")!==BASE)return json({error:"Origine non autorizzata"},403);
+      if(!env.CLOUD_DB)return json({error:"Database non collegato"},503);
+      const db=env.CLOUD_DB;
+      try{
+        if(u.pathname==="/api/cloud/status"&&req.method==="GET"){
+          const start=Date.now();
+          const row=await db.prepare("SELECT schema_version,created_at,(SELECT count(*) FROM cloud_files) AS file_count FROM cloud_meta WHERE id=1").first();
+          if(row?.schema_version!==1)return json({error:"Schema non disponibile"},503);
+          return json({database:"D1",schema:row.schema_version,createdAt:row.created_at,fileCount:row.file_count,checkedAt:new Date().toISOString(),queryMs:Date.now()-start,capacity:20,maxBytes:65536});
+        }
+        if(u.pathname==="/api/cloud/files"&&req.method==="GET"){
+          const rows=await db.prepare("SELECT slot,name,length(body) AS size,sha256,created_at FROM cloud_files ORDER BY slot LIMIT 20").all();
+          return json({files:rows.results});
+        }
+        if(u.pathname==="/api/cloud/files"&&req.method==="POST"){
+          const name=req.headers.get("X-File-Name")||"";
+          if(!/^[A-Za-z0-9][A-Za-z0-9._ -]{0,99}$/.test(name)||name.includes(".."))return json({error:"Nome file non valido"},400);
+          if(req.headers.get("Content-Type")!=="application/octet-stream")return json({error:"Formato non supportato"},415);
+          const length=req.headers.get("Content-Length");
+          if(length!==null&&(!/^\d+$/.test(length)||Number(length)>65536))return json({error:"File troppo grande"},413);
+          if(!req.body)return json({error:"File vuoto"},400);
+          const reader=req.body.getReader();const chunks=[];let size=0;
+          try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>65536){await reader.cancel();return json({error:"File troppo grande"},413)}chunks.push(value)}}finally{reader.releaseLock()}
+          if(!size)return json({error:"File vuoto"},400);
+          const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length}
+          const sha=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes))).map(x=>x.toString(16).padStart(2,"0")).join("");
+          const row=await db.prepare("WITH RECURSIVE slots(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM slots WHERE n<20) INSERT INTO cloud_files(slot,name,body,sha256,created_at) SELECT n,?,?,?,? FROM slots WHERE n NOT IN (SELECT slot FROM cloud_files) ORDER BY n LIMIT 1 RETURNING slot").bind(name,bytes.buffer,sha,new Date().toISOString()).first();
+          if(!row)return json({error:"Archivio pieno"},409);
+          return json({slot:row.slot,sha256:sha},201);
+        }
+        const match=u.pathname.match(/^\/api\/cloud\/files\/([1-9]|1[0-9]|20)$/);
+        if(match&&req.method==="GET"){
+          const row=await db.prepare("SELECT name,body,sha256 FROM cloud_files WHERE slot=?").bind(Number(match[1])).first();
+          if(!row)return json({error:"File non trovato"},404);
+          const bytes=new Uint8Array(row.body);
+          const sha=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes))).map(x=>x.toString(16).padStart(2,"0")).join("");
+          if(sha!==row.sha256||!/^[A-Za-z0-9][A-Za-z0-9._ -]{0,99}$/.test(row.name))return json({error:"Integrità file non verificata"},503);
+          return reply(bytes,200,{"Content-Type":"application/octet-stream","Content-Disposition":'attachment; filename="'+row.name+'"'});
+        }
+        if(match&&req.method==="POST"){
+          const sha=req.headers.get("X-File-SHA256")||"",created=req.headers.get("X-File-Created")||"";
+          if(!/^[a-f0-9]{64}$/.test(sha)||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(created))return json({error:"Identificativo non valido"},400);
+          const r=await db.prepare("DELETE FROM cloud_files WHERE slot=? AND sha256=? AND created_at=?").bind(Number(match[1]),sha,created).run();
+          return r.meta.changes===1?json({deleted:true}):json({error:"File non trovato o modificato"},409);
+        }
+        return json({error:"Operazione non supportata"},404);
+      }catch{return json({error:"Servizio D1 temporaneamente non disponibile"},503)}
+    }
     if(u.pathname==="/api/github/runs"){
       const json=(data,status=200)=>reply(JSON.stringify(data),status,{"Content-Type":"application/json; charset=utf-8"});
       if(req.method!=="GET")return json({error:"Metodo non consentito"},405);
