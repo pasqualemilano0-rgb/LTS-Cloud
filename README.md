@@ -17,3 +17,13 @@ Non sono presenti login, API, deploy, pipeline reali, segreti o collegamenti Git
 
 ## Versione 0.2
 Tema chiaro, navigazione con icone SVG e visualizzazione delle esecuzioni a schede su smartphone. Funzionalità demo invariate.
+
+
+## Accesso riservato — GitHub OAuth
+- Homepage: https://lts-pipeline.pasqualemilano0.workers.dev
+- Authorization callback URL: https://lts-pipeline.pasqualemilano0.workers.dev/auth/callback
+- Registrare una nuova OAuth App nelle impostazioni GitHub (Developer settings). Non richiedere accesso ai repository.
+- Configurare GITHUB_CLIENT_ID e GITHUB_CLIENT_SECRET nelle variabili Secret del Worker lts-pipeline; SESSION_SECRET è una chiave casuale già predisposta su Cloudflare. Non inserire valori nel repository.
+- Il Worker verifica l'identificativo numerico GitHub del proprietario, usa state, PKCE S256 e cookie di sessione firmati HttpOnly/Secure con scadenza di un'ora. Nessun token GitHub viene salvato. Prima di configurare le credenziali la console non è accessibile.
+- L'integrazione futura con i repository privati richiederà autorizzazioni separate e limitate, preferibilmente con GitHub App. Nessuna pipeline reale è attiva.
+- Pubblicazione iniziale tramite Cloudflare API; non è ancora configurata la pubblicazione automatica da GitHub. Il collaudo OAuth effettivo è necessario dopo la configurazione.
